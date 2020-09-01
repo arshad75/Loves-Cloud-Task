@@ -1,15 +1,3 @@
-#Note:- ye war file ka pura content vpc se lekar public subnet,private subnet, IG,Nat-gateway, public subnet RT,Private Subnet RT or 2 SG create karne k liye hai
-#note hame pahle hamare ubuntu pc me ansible create karne se pahale kuch setting karni hogi
-# 1:- installed ansible :- follow google and installed ansible
-# 2:- installed python3 :- sudo apt install python3
-# 3:- installed pip3    :- sudo apt install python3-pip
-# 4:- Installed boto3   :- sudo pip install boto boto3 ansible
-# 5:- Installed aws cli :- sudo pip3 install awscli
-# 6:- configure aws cli :- aws configure (use this cmd and enter aws user access key or id)
-
-
-# for create vpc follow this link:- https://jeremievallee.com/2016/07/27/aws-vpc-ansible.html
-
 
 # AWS Region
 aws_region:     "us-east-1"
