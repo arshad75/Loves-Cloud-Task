@@ -1,0 +1,190 @@
+---
+### provision AWS VPC
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  pre_tasks:
+    - include_vars: vars.yml
+  tasks:
+
+    - name: Create an EC2 key
+      ec2_key:
+        name: "mykey"
+        region: "{{aws_region}}"
+      register: ec2_key
+
+    - name: save private key
+      copy:
+        content: "{{ ec2_key.key.private_key }}" 
+        dest: "./mykey.pem"
+        mode: 0600
+        remote_src: True
+      when: ec2_key.changed
+
+    - name:               Create VPC
+      ec2_vpc_net:
+        name:             "{{ vpc_name }}"
+        cidr_block:       "{{ vpc_cidr_block }}"
+        region:           "{{ aws_region }}"
+        state:            "present"
+      register: my_vpc
+
+    - name: sleep for 10 seconds and continue with play
+      wait_for: timeout=10
+      delegate_to: localhost
+
+    - name:               Set VPC ID in variable
+      set_fact:
+        vpc_id:           "{{ my_vpc.vpc.id }}"
+
+    - name:               Create Public Subnet
+      ec2_vpc_subnet:
+        state:            "present"
+        vpc_id:           "{{ vpc_id }}"
+        cidr:             "{{ public_subnet_cidr }}"
+        az:               "{{ aws_region }}a"
+        region:           "{{ aws_region }}"
+        resource_tags:
+          Name:           "Public Subnet"
+      register: my_public_subnet
+
+    - name:               Set Public Subnet ID in variable
+      set_fact:
+        public_subnet_id: "{{ my_public_subnet.subnet.id }}"
+
+    - name:               Create Private Subnet
+      ec2_vpc_subnet:
+        state:            "present"
+        vpc_id:           "{{ vpc_id }}"
+        cidr:             "{{ private_subnet_cidr }}"
+        az:               "{{ aws_region }}b"
+        region:           "{{ aws_region }}"
+        resource_tags:
+          Name:           "Private Subnet"
+      register: my_private_subnet
+
+    - name:               Set Private Subnet ID in variable
+      set_fact:
+        private_subnet_id: "{{ my_private_subnet.subnet.id }}"
+
+
+    - name:               Create Internet Gateway for VPC
+      ec2_vpc_igw:
+        vpc_id:           "{{ vpc_id }}"
+        region:           "{{ aws_region }}"
+        state:            "present"
+      register: my_vpc_igw
+
+    - name:               Set Internet Gateway ID in variable
+      set_fact:
+        igw_id:           "{{ my_vpc_igw.gateway_id }}"
+
+    - name: Create Elastic IP
+      shell: >
+         aws ec2 allocate-address --domain vpc --query AllocationId | tr -d '"'
+      register: eip
+
+    - debug: var=eip
+
+    - name: Set EIP in variable
+      set_fact:
+        my_elastic_ip: "{{ eip.stdout }}"
+
+    - name: Create NAT Gateway
+      shell: >
+        aws ec2 create-nat-gateway \
+        --subnet-id {{ public_subnet_id }} \
+        --allocation-id {{ my_elastic_ip }} \
+        --query NatGateway.NatGatewayId | tr -d '"'
+      register: my_nat_gateway
+
+    - name: Set Nat Gateway ID in variable
+      set_fact:
+        nat_gateway_id: "{{ my_nat_gateway.stdout }}"
+
+    - name: sleep for 20 seconds and continue with play
+      wait_for: timeout=20
+      delegate_to: localhost
+
+    - name:               Set up public subnet route table
+      ec2_vpc_route_table:
+        vpc_id:           "{{ vpc_id }}"
+        region:           "{{ aws_region }}"
+        tags:
+          Name:           "Public routing"
+        subnets:
+          - "{{ public_subnet_id }}"
+        routes:
+          - dest:         "0.0.0.0/0"
+            gateway_id:   "{{ igw_id }}"
+
+    - name:               Set up private subnet route table
+      ec2_vpc_route_table:
+        vpc_id:           "{{ vpc_id }}"
+        region:           "{{ aws_region }}"
+        tags:
+          Name:           "Private routing"
+        subnets:
+          - "{{ private_subnet_id }}"
+        routes:
+          - dest:         "0.0.0.0/0"
+            gateway_id:   "{{ igw_id }}"
+
+    - name:               Create Main Security Group For Public Subnet
+      ec2_group:
+        name:             "My Security Group"
+        description:      "My Security Group"
+        vpc_id:           "{{ vpc_id }}"
+        region:           "{{ aws_region }}"
+        rules:
+          - proto:        tcp
+            from_port:    22
+            to_port:      22
+            cidr_ip:      "{{ my_ip_range }}"
+          - proto:        tcp
+            from_port:    80
+            to_port:      80
+            cidr_ip:      "{{ my_ip_range }}"
+      register: my_vpc_sg
+
+    - name:               Set Security Group ID in variable
+      set_fact:
+        sg_id:           "{{ my_vpc_sg.group_id }}"
+
+    - name: Create Private Security Group
+      ec2_group:
+        name: "Private Instances SG"
+        description: "Private Instances SG"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto:        tcp
+            from_port:    22
+            to_port:      22
+          - proto:        tcp
+            from_port:    80
+            to_port:      80
+            group_id: "{{ sg_id }}"
+
+    - name: Ec2 - Nginx Server - Launch
+      ec2:
+        key_name: "mykey"
+        instance_type: "{{ec2_instance_type}}"
+        image: "{{ec2_image}}"
+        vpc_subnet_id: "{{ public_subnet_id }}"
+        group_id: "{{ my_vpc_sg.group_id }}"
+        assign_public_ip: True
+        wait: true
+        region: "{{aws_region}}"
+        instance_tags: '{"Name":"{{ec2_nginx_Name}}","Environment":"{{ec2_tag_Environment}}"}'
+      register: ec2
+
+    - name: See ec2 value
+      debug: var=ec2
+
+    - name: Wait for Nginix Server SSH Service
+      wait_for:
+        host: "{{ item.public_ip }}"
+        port: 22
+        delay: 120
+      with_items: "{{ ec2.instances }}"

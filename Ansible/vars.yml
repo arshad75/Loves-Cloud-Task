@@ -1,0 +1,52 @@
+#Note:- ye war file ka pura content vpc se lekar public subnet,private subnet, IG,Nat-gateway, public subnet RT,Private Subnet RT or 2 SG create karne k liye hai
+#note hame pahle hamare ubuntu pc me ansible create karne se pahale kuch setting karni hogi
+# 1:- installed ansible :- follow google and installed ansible
+# 2:- installed python3 :- sudo apt install python3
+# 3:- installed pip3    :- sudo apt install python3-pip
+# 4:- Installed boto3   :- sudo pip install boto boto3 ansible
+# 5:- Installed aws cli :- sudo pip3 install awscli
+# 6:- configure aws cli :- aws configure (use this cmd and enter aws user access key or id)
+
+
+# for create vpc follow this link:- https://jeremievallee.com/2016/07/27/aws-vpc-ansible.html
+
+
+# AWS Region
+aws_region:     "us-east-1"
+
+# VPC Information
+vpc_name:       "vpctest"
+vpc_cidr_block: "10.10.0.0/16"
+vpc_id: "my_vpc.vpc.id"
+
+# Public Subnets
+public_subnet_cidr:  "10.10.1.0/24"
+az: "us-east-1a"
+public_subnet_id: "my_public_subnet.subnet.id"
+
+# Private Subnet
+private_subnet_cidr:  "10.10.2.0/24"
+az: "us-east-1b"
+private_subnet_id: "my_private_subnet.subnet.id"
+
+# Internet Gateway
+igw_id: "my_vpc_igw.gateway_id"
+
+# Set Elastic IP
+my_elastic_ip: "eip.stdout"
+
+# Nat Gateway
+nat_gateway_id: "my_nat_gateway.stdout"
+
+# Security Group Rule
+my_ip_range:          "0.0.0.0/0"
+sg_id: "my_vpc_sg.group_id"
+
+#Ec2 Launch
+ec2_image: "ami-07ebfd5b3428b6f4d"
+ec2_instance_type: "t2.micro"
+ec2_nginx_Name: "Nginx_Server"
+ec2_tag_Environment: "Nginx"
+
+env: "staging" # env name, this will be used as an inventory file name
+app_code_user: "ubuntu" # remote user
